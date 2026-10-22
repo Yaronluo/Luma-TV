@@ -1,0 +1,15 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Luma TV 原创背景源稿</title>
+<style>
+/* 960×540 CSS pixels, export at 2×. No third-party images or live blur. */
+* {box-sizing:border-box}
+body {margin:0}
+.screen {position:relative;width:960px;height:540px;overflow:hidden;background:#59666a;isolation:isolate}
+.wall {position:absolute;inset:0;z-index:-2;background:radial-gradient(ellipse at 95% 0%,#263f50 0%,transparent 65%),radial-gradient(ellipse at 2% 105%,#c0b79b 0%,transparent 60%),linear-gradient(128deg,#7b8d94 0%,#455766 54%,#293e4a 100%)}
+.wall:before {content:"";position:absolute;width:1000px;height:650px;border-radius:48%;left:55px;top:125px;transform:rotate(-26deg);background:linear-gradient(175deg,#b6c1bf90 0%,#d2d1bb20 11%,#1f384c00 25%,#142b3d60 60%);box-shadow:0 -12px 36px #d6d7c142,0 38px 65px #0d1a345c}
+.wall:after {content:"";position:absolute;inset:0;background:linear-gradient(0deg,#0b172b60,transparent 65%)}
+/* ocean: hue-rotate(10deg) saturate(1.35) brightness(.83)
+   warm: hue-rotate(160deg) saturate(.6) brightness(.94) */
+</style>
+<div class="screen"><div class="wall"></div></div>
