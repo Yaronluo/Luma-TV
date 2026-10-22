@@ -21,6 +21,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -96,7 +97,7 @@ fun LumaApp(model: LauncherModel, onExit: () -> Unit) {
     }
 
     Box(Modifier.fillMaxSize().semantics { testTagsAsResourceId = true }) {
-        Atmosphere(c, Modifier.fillMaxSize())
+        Atmosphere(c, Modifier.fillMaxSize(), wash = if (screen == "home") .22f else 1f)
         if (screen == "settings") {
             SettingsPage(c, model, settingsTab, settingsReturnToContent, onTab = { settingsTab = it },
                 onHidden = { settingsReturnToContent = true; screen = "hidden" }, onBack = { back() })
@@ -328,7 +329,7 @@ private fun ApplicationsPage(
                         requesters.getValue(app.id), app.id == moving,
                         onFocus = { actualFocus = app.id; cursor = app.id; memory.lastCard = app.id; memory.mark = mark(app.id); onFocused(app.id) },
                         onKey = { false },
-                        onClick = { onActivate(app, mark(app.id)) }, onLongClick = { onMenu(app) })
+                        onClick = { onActivate(app, mark(app.id)) }, onLongClick = { onMenu(app) }, name = TileLabel.Always)
                 }
             }
         }
@@ -352,7 +353,7 @@ private fun ApplicationsPage(
 }
 
 @Composable
-internal fun LumaClock() {
+internal fun LumaClock(fontSize: TextUnit = 18.sp) {
     var time by remember { mutableStateOf("") }
     LaunchedEffect(Unit) {
         while (true) {
@@ -360,7 +361,7 @@ internal fun LumaClock() {
             delay(1000L * (60 - java.util.Calendar.getInstance().get(java.util.Calendar.SECOND)))
         }
     }
-    Text(time, color = Ink.copy(alpha = .88f), fontSize = 18.sp, fontWeight = FontWeight.Normal, letterSpacing = .2.sp)
+    Text(time, color = Ink.copy(alpha = .88f), fontSize = fontSize, fontWeight = FontWeight.Normal, letterSpacing = .2.sp)
 }
 
 @Composable

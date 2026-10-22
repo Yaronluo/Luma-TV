@@ -44,10 +44,23 @@ class LauncherModel(app: Application) : AndroidViewModel(app) {
     fun refresh(invalidate: Boolean = false) {
         viewModelScope.launch {
             refreshLock.withLock {
-                runCatching { repository.discover() }.onSuccess {
+                runCatching { repository.discover() }.onSuccess { apps ->
                     if (invalidate) { repository.invalidate(); iconRevision.value++ }
-                    _apps.value = it
+                    _apps.value = apps
+                    warm(apps)
                 }.onFailure { notify("读取应用失败，请返回后重试") }
+            }
+        }
+    }
+
+    /** Loads every tile's artwork once, so the first expanded frame is not a wall of placeholders. */
+    private var warmJob: Job? = null
+    private fun warm(apps: List<AppEntry>) {
+        warmJob?.cancel()
+        warmJob = viewModelScope.launch(Dispatchers.IO) {
+            apps.forEach { app ->
+                repository.artwork(app, preferBanner = true)
+                repository.artwork(app, preferBanner = false)
             }
         }
     }

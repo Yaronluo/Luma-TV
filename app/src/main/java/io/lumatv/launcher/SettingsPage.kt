@@ -252,7 +252,7 @@ private fun PreferenceRow(label: String, value: String, tag: String, requester: 
         colors = ClickableSurfaceDefaults.colors(containerColor = Color(0x32233647), focusedContainerColor = Ink,
             contentColor = Ink, focusedContentColor = Color(0xFF26343E)),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.025f),
-        border = ClickableSurfaceDefaults.border(focusedBorder = Border(BorderStroke(0.dp, Color.Transparent)))) {
+        border = quietBorder(), glow = quietGlow()) {
         Row(Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(label, fontSize = 18.sp)
             Spacer(Modifier.weight(1f))
