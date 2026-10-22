@@ -39,6 +39,16 @@
 
 这不是一次完整的视觉验收：实体电视、4K与长时间运行的画面表现仍未验收。
 
+## 默认背景 v2
+
+原默认背景是全画面中灰的蓝调渐层：明度中庸、左上钴蓝与右下黄铜两个光极等权、没有材质证据，展开库时读作“默认渐变”。v2 换成暗场单一光源的雾面石板——左上低角度光揭示细微矿物颗粒、中段入灰、下三分近黑，色相与界面冷白同族。源稿、提示词与导出参数见 [design/assets/ambient-source-v2.md](design/assets/ambient-source-v2.md)。
+
+- 导出仍走 `design/export-background.cjs`：源图外扩到2200×1238后居中裁1920×1080，模糊版sigma76px。清晰版297KB，模糊版63KB。
+- 构建通过（assembleDebug、单测、lint、androidTest编译）；`install -r`覆盖安装，未清空数据。
+- 模拟器（`emulator-5554`，1920×1080）实拍首页、展开网格、设置页：展开时壁纸退为底场，应用图块是画面唯一亮物；下三分近黑处静帧未观察到色带。
+- 背景模糊开启与关闭两种资源都实拍核对，关闭时可见颗粒材质；核对后把偏好恢复为默认的开启。
+- `docs/screenshots/apps.png`、`docs/screenshots/settings.png`已用本次实拍替换；未在实体电视、4K与长时间运行下复核。
+
 ## 遥控器覆盖
 
 `app/src/androidTest/java/io/lumatv/launcher/RemoteNavigationTest.kt` 使用真实方向键、确认、返回及长按事件，不点击屏幕坐标，也不修改系统Home角色。

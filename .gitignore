@@ -21,3 +21,5 @@ captures/
 *.pem
 .DS_Store
 Thumbs.db
+
+design/node_modules/
