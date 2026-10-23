@@ -97,7 +97,7 @@ fun LumaApp(model: LauncherModel, onExit: () -> Unit) {
     }
 
     Box(Modifier.fillMaxSize().semantics { testTagsAsResourceId = true }) {
-        Atmosphere(c, Modifier.fillMaxSize(), wash = if (screen == "home") .22f else 1f)
+        if (screen != "home") Atmosphere(c, Modifier.fillMaxSize())
         if (screen == "settings") {
             SettingsPage(c, model, settingsTab, settingsReturnToContent, onTab = { settingsTab = it },
                 onHidden = { settingsReturnToContent = true; screen = "hidden" }, onBack = { back() })

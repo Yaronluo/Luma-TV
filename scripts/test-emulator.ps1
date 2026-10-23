@@ -39,7 +39,7 @@ try {
     & $adb -s $Serial push fixture\build\outputs\apk\eight\debug\fixture-eight-debug.apk /data/local/tmp/luma-fixture-eight-update.apk
     $output = & $adb -s $Serial shell am instrument -w -r -e class io.lumatv.launcher.RemoteNavigationTest io.lumatv.launcher.test/androidx.test.runner.AndroidJUnitRunner
     $output | Tee-Object -FilePath artifacts\device-tests.log
-    if (($output -join "`n") -notmatch 'OK \(13 tests\)') { throw 'Remote-control acceptance failed; inspect artifacts\device-tests.log.' }
+    if (($output -join "`n") -notmatch 'OK \(14 tests\)') { throw 'Remote-control acceptance failed; inspect artifacts\device-tests.log.' }
 } finally {
     foreach ($name in $installedFixtures) {
         $present = & $adb -s $Serial shell pm path "io.lumatv.fixture.$name"

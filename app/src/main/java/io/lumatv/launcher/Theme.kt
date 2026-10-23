@@ -73,6 +73,12 @@ fun Atmosphere(config: LumaConfig, modifier: Modifier = Modifier, wash: Float = 
     val bitmap by produceState<android.graphics.Bitmap?>(null, config.background, config.wallpaperRevision, config.backgroundBlur) {
         value = BackgroundImages.load(context, config)
     }
+    WallpaperLayers(bitmap, config, modifier, wash)
+}
+
+/** Shared painting for the static settings backdrop and the home's lightweight motion layer. */
+@Composable
+internal fun WallpaperLayers(bitmap: android.graphics.Bitmap?, config: LumaConfig, modifier: Modifier, wash: Float) {
     val ease = wash.coerceIn(0f, 1f)
     fun ink(alpha: Float) = Color(0xFF070B10).copy(alpha = alpha * ease)
     Box(modifier.background(Color(0xFF070B10))) {
@@ -128,14 +134,15 @@ private fun IconTile(
     label: String, tag: String, requester: FocusRequester, reduced: Boolean, background: Color,
     name: TileLabel, moving: Boolean = false, onFocus: () -> Unit,
     onKey: (KeyEvent) -> Boolean = { false }, onClick: () -> Unit, onLongClick: (() -> Unit)? = null,
-    aspect: Float = 1f, glass: Boolean = false, content: @Composable BoxScope.() -> Unit,
+    aspect: Float = 1f, glass: Boolean = false, softFocus: Boolean = false, content: @Composable BoxScope.() -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
+    val tileShape = if (softFocus) RoundedCornerShape(18.dp) else TileShape
     val springFloat = spring<Float>(dampingRatio = .74f, stiffness = if (reduced) 2600f else 430f)
     val springDp = spring<Dp>(dampingRatio = .74f, stiffness = if (reduced) 2600f else 430f)
-    val scale by animateFloatAsState(if (focused) (if (reduced) 1.012f else 1.075f) else 1f, springFloat, label = "icon-scale")
-    val lift by animateFloatAsState(if (focused && !reduced) -4f else 0f, springFloat, label = "icon-lift")
-    val elevation by animateDpAsState(if (focused) 20.dp else 0.dp, springDp, label = "icon-elevation")
+    val scale by animateFloatAsState(if (focused) (if (reduced) 1.012f else if (softFocus) 1.06f else 1.075f) else 1f, springFloat, label = "icon-scale")
+    val lift by animateFloatAsState(if (focused && !reduced) (if (softFocus) -3f else -4f) else 0f, springFloat, label = "icon-lift")
+    val elevation by animateDpAsState(if (focused) (if (softFocus) 16.dp else 20.dp) else 0.dp, springDp, label = "icon-elevation")
     val light by animateFloatAsState(if (focused) 1f else 0f, springFloat, label = "icon-light")
     val nameAlpha by animateFloatAsState(when (name) {
         TileLabel.Always -> 1f
@@ -147,20 +154,20 @@ private fun IconTile(
             modifier = Modifier.fillMaxWidth().aspectRatio(aspect).focusRequester(requester)
                 .onPreviewKeyEvent(onKey).onFocusChanged { focused = it.isFocused; if (it.isFocused) onFocus() }
                 .graphicsLayer { translationY = lift.dp.toPx(); scaleX = scale; scaleY = scale }
-                .shadow(elevation, TileShape, clip = false)
+                .shadow(elevation, tileShape, clip = false)
                 .semantics { contentDescription = label }.testTag(tag),
-            shape = ClickableSurfaceDefaults.shape(TileShape),
+            shape = ClickableSurfaceDefaults.shape(tileShape),
             colors = ClickableSurfaceDefaults.colors(containerColor = Color.Transparent,
                 focusedContainerColor = Color.Transparent),
             scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
             border = quietBorder(), glow = quietGlow()) {
-            Box(Modifier.fillMaxSize().clip(TileShape).background(
+            Box(Modifier.fillMaxSize().clip(tileShape).background(
                 if (glass) Brush.verticalGradient(listOf(Color.White.copy(alpha = .11f),
                     Color.White.copy(alpha = .05f), Color.White.copy(alpha = .02f)))
                 else Brush.verticalGradient(listOf(background.tint(.07f), background, background.tint(-.13f))))) {
                 content()
                 Box(Modifier.matchParentSize().background(Color.White.copy(alpha = .07f * light)))
-                if (moving) Box(Modifier.matchParentSize().border(BorderStroke(2.dp, Accent), TileShape))
+                if (moving) Box(Modifier.matchParentSize().border(BorderStroke(2.dp, Accent), tileShape))
             }
         }
         if (name != TileLabel.None) Box(Modifier.padding(top = 7.dp).height(18.dp).fillMaxWidth().graphicsLayer { alpha = nameAlpha },
@@ -181,6 +188,7 @@ fun AppTile(
     requester: FocusRequester, moving: Boolean, onFocus: () -> Unit,
     onKey: (KeyEvent) -> Boolean, onClick: () -> Unit, onLongClick: () -> Unit,
     name: TileLabel = TileLabel.Focused, star: Boolean = false, aspect: Float = 1f, banner: Boolean = false,
+    softFocus: Boolean = false,
 ) {
     // The tile is the app's own TV banner when it has one; only banner-less apps fall back to an
     // icon sitting on the colour field.
@@ -192,7 +200,7 @@ fun AppTile(
     IconTile(app.displayName, "app:${app.id}", requester, reduced,
         art?.let { Color(it.background) } ?: Color(0xFF171C24),
         name, moving, onFocus, onKey, onClick, onLongClick,
-        aspect = aspect, glass = false) {
+        aspect = aspect, glass = false, softFocus = softFocus) {
         val artwork = art
         when {
             artwork == null -> Text(app.label.take(1), color = Ink.copy(alpha = .38f), fontSize = 22.sp,
@@ -218,9 +226,10 @@ fun AppTile(
 /** System tiles (all apps, settings, management) share the tile geometry but carry their own glyph. */
 @Composable
 fun HomeAction(label: String, tag: String, kind: Int, requester: FocusRequester, reduced: Boolean,
-    onFocus: () -> Unit, onClick: () -> Unit, name: TileLabel = TileLabel.Focused, aspect: Float = 1f) {
+    onFocus: () -> Unit, onClick: () -> Unit, name: TileLabel = TileLabel.Focused, aspect: Float = 1f,
+    softFocus: Boolean = false) {
     IconTile(label, tag, requester, reduced, Color(0xFF1E242E), name, onFocus = onFocus, onClick = onClick,
-        aspect = aspect) {
+        aspect = aspect, softFocus = softFocus) {
         Canvas(Modifier.fillMaxHeight(if (aspect < 1.25f) .46f else .42f).aspectRatio(1f).align(Alignment.Center)) {
             val unit = size.width / 56f
             fun point(x: Float, y: Float) = Offset(x * unit, y * unit)
