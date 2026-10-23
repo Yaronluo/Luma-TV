@@ -105,21 +105,26 @@ internal fun quietGlow() = ClickableSurfaceDefaults.glow(Glow.None, Glow.None, G
 @Composable
 fun LumaButton(
     text: String, tag: String, modifier: Modifier = Modifier, requester: FocusRequester? = null,
-    active: Boolean = false, flat: Boolean = false, onFocus: () -> Unit = {}, onKey: (KeyEvent) -> Boolean = { false },
+    active: Boolean = false, flat: Boolean = false, dense: Boolean = false,
+    onFocus: () -> Unit = {}, onKey: (KeyEvent) -> Boolean = { false },
     onClick: () -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
+    val shape = RoundedCornerShape(if (dense) 10.dp else 12.dp)
     Surface(onClick = onClick,
         modifier = modifier.then(if (requester != null) Modifier.focusRequester(requester) else Modifier)
             .onPreviewKeyEvent(onKey).onFocusChanged { focused = it.isFocused; if (it.isFocused) onFocus() }
-            .zIndex(if (focused) 2f else 0f).shadow(if (focused) 14.dp else 0.dp, RoundedCornerShape(12.dp), clip = false).testTag(tag),
-        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)),
+            .zIndex(if (focused) 2f else 0f).shadow(if (focused) 14.dp else 0.dp, shape, clip = false).testTag(tag),
+        shape = ClickableSurfaceDefaults.shape(shape),
         colors = ClickableSurfaceDefaults.colors(containerColor = Color.White.copy(alpha = if (active) .14f else if (flat) 0f else .07f),
             contentColor = Ink, focusedContainerColor = Ink, focusedContentColor = Color(0xFF1D2733)),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.03f),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = if (dense) 1.02f else 1.03f),
         border = quietBorder(), glow = quietGlow()) {
-        Box(Modifier.defaultMinSize(minHeight = 44.dp).padding(horizontal = 18.dp, vertical = 11.dp), contentAlignment = Alignment.CenterStart) {
-            Text(text, fontSize = 17.sp, fontWeight = if (focused || active) FontWeight.Medium else FontWeight.Normal)
+        Box(Modifier.defaultMinSize(minHeight = if (dense) 38.dp else 44.dp)
+            .padding(horizontal = if (dense) 15.dp else 18.dp, vertical = if (dense) 8.dp else 11.dp),
+            contentAlignment = Alignment.CenterStart) {
+            Text(text, fontSize = if (dense) 15.sp else 17.sp,
+                fontWeight = if (focused || active) FontWeight.Medium else FontWeight.Normal)
         }
     }
 }
@@ -218,8 +223,11 @@ fun AppTile(
                     contentScale = ContentScale.Fit)
             }
         }
-        if (star && favorite) Text("★", Modifier.align(Alignment.TopEnd).padding(7.dp),
-            color = Color.White.copy(alpha = .7f), fontSize = 10.sp)
+        if (star && favorite) Box(Modifier.align(Alignment.TopEnd).padding(8.dp)
+            .background(Color(0xFF0A1018).copy(alpha = .55f), RoundedCornerShape(8.dp))
+            .padding(horizontal = 6.dp, vertical = 3.dp)) {
+            Text("★", color = Accent, fontSize = 10.sp)
+        }
     }
 }
 

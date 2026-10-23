@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $sdk = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } else { Join-Path $env:LOCALAPPDATA 'Android\Sdk' }
 $adb = Join-Path $sdk 'platform-tools\adb.exe'
-$names = @('one','two','three','four','five','six','seven','eight')
+$names = @('one','two','three','four','five','six','seven','eight','nine','ten','eleven','twelve','thirteen')
 if (-not $Serial.StartsWith('emulator-')) { throw 'Only the existing emulator is allowed.' }
 $avd = & $adb -s $Serial emu avd name
 if (($avd -join "`n") -notmatch '(?m)^BILI_TV_API_34\s*$') { throw 'Target is not BILI_TV_API_34.' }
@@ -28,7 +28,7 @@ try {
     & .\scripts\run-emulator.ps1 -Serial $Serial
     & $adb -s $Serial install -r app\build\outputs\apk\androidTest\debug\app-debug-androidTest.apk
     if ($LASTEXITCODE -ne 0) { throw 'Test installation failed.' }
-    foreach ($name in $names[0..6]) {
+    foreach ($name in ($names | Where-Object { $_ -ne 'eight' })) {
         & $adb -s $Serial install "fixture\build\outputs\apk\$name\debug\fixture-$name-debug.apk"
         if ($LASTEXITCODE -ne 0) { throw "Fixture installation failed: $name" }
         $installedFixtures += $name
@@ -39,7 +39,7 @@ try {
     & $adb -s $Serial push fixture\build\outputs\apk\eight\debug\fixture-eight-debug.apk /data/local/tmp/luma-fixture-eight-update.apk
     $output = & $adb -s $Serial shell am instrument -w -r -e class io.lumatv.launcher.RemoteNavigationTest io.lumatv.launcher.test/androidx.test.runner.AndroidJUnitRunner
     $output | Tee-Object -FilePath artifacts\device-tests.log
-    if (($output -join "`n") -notmatch 'OK \(14 tests\)') { throw 'Remote-control acceptance failed; inspect artifacts\device-tests.log.' }
+    if (($output -join "`n") -notmatch 'OK \(16 tests\)') { throw 'Remote-control acceptance failed; inspect artifacts\device-tests.log.' }
 } finally {
     foreach ($name in $installedFixtures) {
         $present = & $adb -s $Serial shell pm path "io.lumatv.fixture.$name"

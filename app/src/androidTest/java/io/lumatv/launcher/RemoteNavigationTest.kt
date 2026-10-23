@@ -41,7 +41,11 @@ class RemoteNavigationTest {
     }
 
     @After fun restore() {
-        runBlocking { ConfigStore(compose.activity).update { original } }
+        val store = ConfigStore(compose.activity)
+        // Destroy the activity first: its model may still have a delayed bookmark write.
+        // Restoring while it is alive lets that write overwrite the saved configuration.
+        compose.activityRule.scenario.close()
+        runBlocking { store.update { original } }
     }
 
     private fun focusedTag(): String {
@@ -146,12 +150,19 @@ class RemoteNavigationTest {
             it.copy(reducedMotion = false, background = "ambient", brightness = 1, backgroundBlur = true)
         } }
         compose.waitUntil(5000) { compose.activity.model.config.value?.reducedMotion == false }
-        val dock = listOf("com.bili.tv", "com.google.android.youtube.tv", "com.google.android.youtube.tvmusic", "com.android.tv", "com.android.vending")
-            .map { pkg -> compose.activity.model.apps.value!!.first { it.packageName == pkg }.id }
-        runBlocking { ConfigStore(compose.activity).update { it.copy(favorites = dock) } }
-        compose.waitUntil(5000) { compose.activity.model.config.value?.favorites == dock }
-        compose.waitForIdle()
         val app = compose.activity.model.apps.value!!.first { it.packageName == "com.android.tv.settings" }
+        // Use installed TV entries: the emulator need not retain formal BILI or Live TV.
+        val dock = orderedApps(compose.activity.model.apps.value!!.filter { it.television && it.id != app.id }, emptyList())
+            .sortedBy { it.packageName.startsWith("io.lumatv.fixture.") }.take(5).map { it.id }
+        assertEquals(5, dock.size)
+        // Keep the grey probe in the first grid row so Up/Down really collapses and
+        // reveals the library even when disposable apps are installed for other tests.
+        val order = listOf(app.id) + compose.activity.model.apps.value!!.filter { it.television && it.id != app.id }.map { it.id }
+        runBlocking { ConfigStore(compose.activity).update { it.copy(favorites = dock, order = order) } }
+        compose.waitUntil(5000) {
+            compose.activity.model.config.value?.let { it.favorites == dock && it.order == order } == true
+        }
+        compose.waitForIdle()
         val tag = "app:${app.id}"
         focusTag(tag)
         press(android.view.KeyEvent.KEYCODE_DPAD_UP)
@@ -228,6 +239,65 @@ class RemoteNavigationTest {
         assertEquals(1, saved.order.indexOf(selected))
     }
 
+    @Test fun libraryRowsAndFavoriteSortUseSpatialNavigation() {
+        val ids = orderedApps(compose.activity.model.apps.value!!.filter { it.television }, emptyList()).map { it.id }
+        assertTrue("Needs more than three rows of real or disposable apps", ids.size > 18)
+        runBlocking { ConfigStore(compose.activity).update { it.copy(favorites = ids) } }
+        compose.waitForIdle()
+        focusTag("manage")
+        press(android.view.KeyEvent.KEYCODE_DPAD_CENTER)
+        compose.onNodeWithTag("page:manage").assertExists()
+        val first = compose.onNode(isFocused()).fetchSemanticsNode().boundsInRoot
+        repeat(5) { press(android.view.KeyEvent.KEYCODE_DPAD_RIGHT) }
+        assertEquals("app:${ids[5]}", focusedTag())
+        val sixth = compose.onNode(isFocused()).fetchSemanticsNode().boundsInRoot
+        assertEquals(first.top, sixth.top, 1f)
+        assertEquals(5f / 3f, sixth.width / sixth.height, .02f)
+        press(android.view.KeyEvent.KEYCODE_DPAD_DOWN)
+        assertEquals("app:${ids[11]}", focusedTag())
+        repeat(5) { press(android.view.KeyEvent.KEYCODE_DPAD_LEFT) }
+        repeat(2) { press(android.view.KeyEvent.KEYCODE_DPAD_DOWN) }
+        assertEquals("app:${ids[18]}", focusedTag())
+        val scrolled = compose.onNode(isFocused()).fetchSemanticsNode().boundsInRoot
+        val viewport = compose.onNodeWithTag("app-grid").fetchSemanticsNode().boundsInRoot
+        assertTrue(scrolled.top > viewport.top && scrolled.bottom < viewport.bottom)
+        assertTrue(compose.onNodeWithTag("app-grid").fetchSemanticsNode()
+            .config[SemanticsProperties.VerticalScrollAxisRange].value() > 0f)
+        // Traverse settings and return to the same scrolled row, then check menu restoration.
+        repeat(4) { press(android.view.KeyEvent.KEYCODE_DPAD_UP) }
+        assertEquals("settings", focusedTag())
+        press(android.view.KeyEvent.KEYCODE_DPAD_CENTER)
+        press(android.view.KeyEvent.KEYCODE_BACK)
+        assertEquals("settings", focusedTag())
+        press(android.view.KeyEvent.KEYCODE_DPAD_DOWN)
+        repeat(3) { press(android.view.KeyEvent.KEYCODE_DPAD_DOWN) }
+        assertEquals("app:${ids[18]}", focusedTag())
+        assertEquals(scrolled, compose.onNode(isFocused()).fetchSemanticsNode().boundsInRoot)
+        press(android.view.KeyEvent.KEYCODE_DPAD_CENTER)
+        press(android.view.KeyEvent.KEYCODE_BACK)
+        assertEquals("app:${ids[18]}", focusedTag())
+        compose.onNode(isFocused()).assertIsDisplayed()
+        // Open favorite sorting through the remote menu, then move across the six-column row.
+        press(android.view.KeyEvent.KEYCODE_DPAD_CENTER)
+        repeat(2) { press(android.view.KeyEvent.KEYCODE_DPAD_DOWN) }
+        assertEquals("favorite-sort-action", focusedTag())
+        press(android.view.KeyEvent.KEYCODE_DPAD_CENTER)
+        compose.onNodeWithTag("page:favorites").assertExists()
+        press(android.view.KeyEvent.KEYCODE_DPAD_UP)
+        press(android.view.KeyEvent.KEYCODE_DPAD_CENTER)
+        val expected = moveItem(ids, ids[18], -6)
+        compose.waitUntil(5000) { runBlocking { ConfigStore(compose.activity).config.first().favorites } == expected }
+        repeat(6) { press(android.view.KeyEvent.KEYCODE_DPAD_UP) }
+        assertEquals("settings", focusedTag())
+        press(android.view.KeyEvent.KEYCODE_DPAD_DOWN)
+        val rowStart = compose.onNode(isFocused()).fetchSemanticsNode().boundsInRoot
+        repeat(5) { press(android.view.KeyEvent.KEYCODE_DPAD_RIGHT) }
+        assertEquals("app:${expected[5]}", focusedTag())
+        assertEquals(rowStart.top, compose.onNode(isFocused()).fetchSemanticsNode().boundsInRoot.top, 1f)
+        press(android.view.KeyEvent.KEYCODE_DPAD_DOWN)
+        assertEquals("app:${expected[11]}", focusedTag())
+    }
+
     @Test fun packageLifecycleAndLongGrid() {
         val packageName = "io.lumatv.fixture.eight"
         val initial = focusedTag()
@@ -236,15 +306,23 @@ class RemoteNavigationTest {
         compose.waitUntil(10000) { compose.activity.model.apps.value?.any { it.packageName == packageName } == true }
         compose.waitForIdle()
         assertEquals(initial, focusedTag())
+        // Keep the disposable lifecycle target on the fourth row regardless of how many
+        // existing app labels happen to sort before "Luma 验证 8" on this emulator.
+        val tv = orderedApps(compose.activity.model.apps.value!!.filter { it.television }, emptyList())
+        val order = tv.filter { it.packageName != packageName }.map { it.id } + tv.single { it.packageName == packageName }.id
+        runBlocking { ConfigStore(compose.activity).update { it.copy(order = order) } }
+        compose.waitForIdle()
         focusTag("footer-primary"); press(android.view.KeyEvent.KEYCODE_DPAD_CENTER)
-        val entries = orderedApps(compose.activity.model.apps.value!!.filter { it.television }, emptyList())
+        val entries = orderedApps(tv, order)
         val index = entries.indexOfFirst { it.packageName == packageName }
-        assertTrue(index >= 12) // At least the third row: requires scrolling in this viewport.
+        assertTrue(index >= 18) // At least the fourth row: requires scrolling in this viewport.
         repeat(index / 6) { press(android.view.KeyEvent.KEYCODE_DPAD_DOWN) }
         repeat(index % 6) { press(android.view.KeyEvent.KEYCODE_DPAD_RIGHT) }
         val fixtureTag = "app:${entries[index].id}"
         assertEquals(fixtureTag, focusedTag())
         compose.onNodeWithTag(fixtureTag).assertIsDisplayed()
+        assertTrue(compose.onNodeWithTag("app-grid").fetchSemanticsNode()
+            .config[SemanticsProperties.VerticalScrollAxisRange].value() > 0f)
         device.takeScreenshot(java.io.File(compose.activity.getExternalFilesDir(null), "long-grid.png"))
         // Replacement installation while focused must not move the focus or reorder the list.
         val beforeUpdate = compose.activity.model.iconRevision.value
@@ -295,7 +373,7 @@ class RemoteNavigationTest {
         assertEquals("app:$selected", focusedTag())
         press(android.view.KeyEvent.KEYCODE_DPAD_CENTER)
         compose.waitUntil(5000) { selected !in runBlocking { ConfigStore(compose.activity).config.first().hidden } }
-        compose.onNodeWithTag("footer-primary").assertIsFocused()
+        compose.onNodeWithTag("library-sections").assertIsFocused()
         press(android.view.KeyEvent.KEYCODE_BACK)
         compose.onNodeWithTag("page:settings").assertExists()
         compose.onNodeWithTag("hidden-apps").assertIsFocused()
@@ -336,6 +414,67 @@ class RemoteNavigationTest {
         assertEquals("appearance-brightness", focusedTag())
         press(android.view.KeyEvent.KEYCODE_BACK); press(android.view.KeyEvent.KEYCODE_BACK)
         assertEquals("settings", focusedTag())
+    }
+
+    @Test fun quietLibraryHeaderAndRemoteTransitions() {
+        focusTag("footer-primary")
+        compose.mainClock.autoAdvance = false
+        try {
+            device.pressDPadCenter()
+            repeat(3) { compose.mainClock.advanceTimeByFrame() }
+            compose.mainClock.advanceTimeBy(112)
+            compose.waitForIdle()
+            compose.onNodeWithTag("page:all").assertExists()
+            val middle = compose.onNode(isFocused()).fetchSemanticsNode().boundsInRoot
+            device.takeScreenshot(java.io.File(compose.activity.getExternalFilesDir(null), "library-enter-mid.png"))
+            compose.mainClock.advanceTimeBy(600)
+            compose.waitForIdle()
+            val settled = compose.onNode(isFocused()).fetchSemanticsNode().boundsInRoot
+            assertTrue("Library cards should rise into position", middle.top > settled.top + 2f)
+            assertTrue("Library cards should settle from a smaller scale", middle.width < settled.width)
+            device.takeScreenshot(java.io.File(compose.activity.getExternalFilesDir(null), "library-enter-settled.png"))
+            compose.onNodeWithTag("footer-primary").assertDoesNotExist()
+            compose.onNodeWithText("按方向键浏览，确认打开应用").assertDoesNotExist()
+            compose.onNodeWithText("确认打开 · 长按管理").assertDoesNotExist()
+            device.pressBack()
+            repeat(2) { compose.mainClock.advanceTimeByFrame() }
+            compose.mainClock.advanceTimeBy(48)
+            compose.waitForIdle()
+            compose.onNodeWithTag("page:all").assertExists()
+            device.takeScreenshot(java.io.File(compose.activity.getExternalFilesDir(null), "library-exit-mid.png"))
+            compose.mainClock.advanceTimeBy(500)
+            compose.waitForIdle()
+            compose.onNodeWithTag("page:home").assertExists()
+        } finally { compose.mainClock.autoAdvance = true }
+        press(android.view.KeyEvent.KEYCODE_DPAD_CENTER)
+        press(android.view.KeyEvent.KEYCODE_DPAD_UP)
+        press(android.view.KeyEvent.KEYCODE_DPAD_LEFT)
+        assertEquals("library-sections", focusedTag())
+        press(android.view.KeyEvent.KEYCODE_DPAD_CENTER)
+        assertEquals("manage", focusedTag())
+        press(android.view.KeyEvent.KEYCODE_BACK)
+        assertEquals("library-sections", focusedTag())
+        press(android.view.KeyEvent.KEYCODE_DPAD_CENTER)
+        press(android.view.KeyEvent.KEYCODE_DPAD_CENTER)
+        compose.onNodeWithTag("page:manage").assertExists()
+        compose.onNode(isFocused()).assertIsDisplayed()
+        press(android.view.KeyEvent.KEYCODE_BACK)
+        runBlocking { ConfigStore(compose.activity).update { it.copy(reducedMotion = true) } }
+        compose.waitUntil(5000) { compose.activity.model.config.value?.reducedMotion == true }
+        focusTag("footer-primary")
+        compose.mainClock.autoAdvance = false
+        try {
+            device.pressDPadCenter()
+            repeat(3) { compose.mainClock.advanceTimeByFrame() }
+            compose.waitForIdle()
+            val immediate = compose.onNode(isFocused()).fetchSemanticsNode().boundsInRoot
+            compose.mainClock.advanceTimeBy(500)
+            compose.waitForIdle()
+            val settled = compose.onNode(isFocused()).fetchSemanticsNode().boundsInRoot
+            val density = compose.activity.resources.displayMetrics.density
+            assertEquals(immediate.top, settled.top, 2f * density)
+            assertEquals(immediate.width, settled.width, 2f * density)
+        } finally { compose.mainClock.autoAdvance = true }
     }
 
     @Test fun quickConfirmationFollowsLatestTarget() {

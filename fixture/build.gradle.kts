@@ -11,7 +11,8 @@ android {
     }
     flavorDimensions += "fixture"
     productFlavors {
-        listOf("one", "two", "three", "four", "five", "six", "seven", "eight").forEachIndexed { index, name ->
+        listOf("one", "two", "three", "four", "five", "six", "seven", "eight",
+            "nine", "ten", "eleven", "twelve", "thirteen").forEachIndexed { index, name ->
             create(name) {
                 dimension = "fixture"
                 applicationIdSuffix = ".$name"
