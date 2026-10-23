@@ -2,11 +2,14 @@ package io.lumatv.launcher
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
@@ -32,6 +35,8 @@ import androidx.compose.ui.input.key.*
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -116,6 +121,8 @@ internal fun HomePage(apps: List<AppEntry>, catalog: List<AppEntry>, config: Lum
             }
         }
     }
+
+    fun dockName(id: String): String = dock.getOrNull(dockIds.indexOf(id))?.displayName ?: "全部应用"
     LaunchedEffect(ids, epoch) {
         // Old stage bookmarks return to the corresponding visible app, never an invisible target.
         val saved = memory.mark.id.removePrefix("@hero:")
@@ -191,6 +198,18 @@ internal fun HomePage(apps: List<AppEntry>, catalog: List<AppEntry>, config: Lum
             1f to Color(0xFF030A14).copy(alpha = .88f))))
         Box(Modifier.fillMaxSize().background(Color(0xFF04070B).copy(alpha = .10f * expansion)))
 
+        // The resting home has a visual anchor above the dock; the library owns this space
+        // once opened. Use the same progress so a rapid reversal also brings the clock back.
+        val clockVisibility = (1f - expansion * 2.2f).coerceIn(0f, 1f)
+        if (clockVisibility > 0f) {
+            HomeClock(Modifier.align(Alignment.TopCenter).offset(y = maxHeight * .22f).graphicsLayer {
+                alpha = clockVisibility
+                translationY = -18.dp.toPx() * expansion
+                scaleX = 1f - .02f * expansion
+                scaleY = scaleX
+            })
+        }
+
         // 3. The frosted tray follows the row, fading away as the library opens. It is a
         // decoration behind the tiles and never changes their geometry or receives focus.
         if (expansion < 1f) {
@@ -236,20 +255,35 @@ internal fun HomePage(apps: List<AppEntry>, catalog: List<AppEntry>, config: Lum
             }
         }
 
-        // A separate caption does not move the tiles or consume the bottom safe inset.
-        val captionColumn = dockIds.indexOf(actualFocus)
-        if (captionColumn >= 0 && cursor == actualFocus) {
-            val name = dock.getOrNull(captionColumn)?.displayName ?: "全部应用"
-            Box(Modifier.offset(x = edge, y = firstRowTop - 36.dp)
-                .width(libraryWidth).height(20.dp).testTag("dock-caption"), contentAlignment = Alignment.CenterStart) {
-                AnimatedContent(name, transitionSpec = {
-                    (fadeIn(tween(if (config.reducedMotion) 0 else 180)) +
-                        slideInVertically(tween(if (config.reducedMotion) 0 else 220)) { it / 3 }) togetherWith
-                        fadeOut(tween(if (config.reducedMotion) 0 else 90))
-                }, contentAlignment = Alignment.CenterStart, label = "dock-caption-change") { title ->
-                    Text(title, color = Ink.copy(alpha = .90f), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                        textAlign = TextAlign.Start)
-                }
+        // A separate caption does not move the tiles or consume the bottom safe inset. It follows
+        // the logical target rather than the settled focus, so a fast scan never blinks the name
+        // away between moves. The outgoing name leaves in the direction of travel and the incoming
+        // one follows it, so the eye reads a slide instead of a hard cut.
+        val captionId = cursor.takeIf { it in dockIds }
+        val captionMotion = !config.reducedMotion
+        val captionShift = with(LocalDensity.current) { 26.dp.roundToPx() }
+        Box(Modifier.offset(x = edge, y = firstRowTop - 36.dp)
+            .width(libraryWidth).height(20.dp).testTag("dock-caption"), contentAlignment = Alignment.CenterStart) {
+            AnimatedContent(captionId, modifier = Modifier.fillMaxWidth(), transitionSpec = {
+                val from = dockIds.indexOf(initialState ?: "")
+                val to = dockIds.indexOf(targetState ?: "")
+                val direction = if (!captionMotion || from < 0 || to < 0) 0 else (to - from).coerceIn(-1, 1)
+                val swap = captionMotion && direction != 0
+                // The old name is gone before the new one starts fading in: overlapping strings of
+                // different length read as a doubled label, so the hand-off is strictly sequential
+                // and the caption is empty for barely a couple of frames.
+                val lead = if (swap) 100 else 0
+                ((fadeIn(tween(if (captionMotion) 160 else 0, delayMillis = lead, easing = FastOutSlowInEasing)) +
+                    slideInHorizontally(tween(if (captionMotion) 200 else 0, delayMillis = lead,
+                        easing = FastOutSlowInEasing)) { direction * captionShift }) togetherWith
+                    (fadeOut(tween(if (captionMotion) 90 else 0, easing = LinearOutSlowInEasing)) +
+                        slideOutHorizontally(tween(if (captionMotion) 140 else 0,
+                            easing = LinearOutSlowInEasing)) { -direction * captionShift })) using
+                    SizeTransform(clip = false)
+            }, contentAlignment = Alignment.CenterStart, label = "dock-caption-change") { id ->
+                Text(if (id == null) "" else dockName(id), color = Ink.copy(alpha = .92f), fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium, letterSpacing = .4.sp, maxLines = 1,
+                    overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Start)
             }
         }
 

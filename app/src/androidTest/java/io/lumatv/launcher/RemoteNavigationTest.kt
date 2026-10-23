@@ -395,8 +395,19 @@ class RemoteNavigationTest {
             assertTrue(glass.left >= root.left && glass.right <= root.right)
             compose.onNodeWithTag("app-grid").assertIsNotDisplayed()
             compose.onNode(isFocused()).assertIsDisplayed()
+            compose.onNodeWithTag("home-clock").assertIsDisplayed()
+            compose.onNodeWithTag("home-time").assertIsDisplayed()
+            compose.onNodeWithTag("home-date").assertIsDisplayed()
         }
         assertCollapsedLibrary()
+        val clock = compose.onNodeWithTag("home-clock").fetchSemanticsNode().boundsInRoot
+        assertTrue(clock.top >= root.top && clock.bottom < firstRow.top - 36f * density)
+        assertEquals(root.center.x, clock.center.x, 1f)
+        val shownTime = compose.onNodeWithTag("home-time").fetchSemanticsNode().config[SemanticsProperties.Text].single().text
+        assertTrue(shownTime.matches(Regex("[0-2][0-9]:[0-5][0-9]")))
+        val today = java.time.ZonedDateTime.now().format(
+            java.time.format.DateTimeFormatter.ofPattern("M月d日 · EEEE", java.util.Locale.SIMPLIFIED_CHINESE))
+        compose.onNodeWithTag("home-date").assertTextEquals(today)
         press(android.view.KeyEvent.KEYCODE_DPAD_UP)
         assertEquals(initial, focusedTag()) // Wallpaper has no invisible focus targets.
         compose.onNodeWithTag("dock-caption").assertIsDisplayed()
@@ -427,6 +438,10 @@ class RemoteNavigationTest {
             assertEquals(firstRow.height, movingRow.height, 1f)
             compose.onNodeWithTag("home-dock-glass").assertExists()
             device.takeScreenshot(java.io.File(compose.activity.getExternalFilesDir(null), "expansion-middle.png"))
+            // Clear the time/date before the library enters the upper information area.
+            compose.mainClock.advanceTimeBy(160)
+            compose.waitForIdle()
+            compose.onNodeWithTag("home-clock").assertDoesNotExist()
             // Reverse before completion: both rows must remain together, then settle at the bottom.
             device.pressDPadUp()
             compose.mainClock.advanceTimeByFrame()
@@ -453,6 +468,7 @@ class RemoteNavigationTest {
         compose.onNode(isFocused()).assertIsDisplayed()
         compose.onNodeWithTag("app-grid").assertIsDisplayed()
         compose.onNodeWithTag("home-dock-glass").assertDoesNotExist()
+        compose.onNodeWithTag("home-clock").assertDoesNotExist()
         val bounds = compose.onNode(isFocused()).fetchSemanticsNode().boundsInRoot
         assertTrue(bounds.top > 200f && bounds.bottom < 900f)
         press(android.view.KeyEvent.KEYCODE_DPAD_UP)
